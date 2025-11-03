@@ -36,8 +36,3 @@ Track prices, view 24h charts, search any coin, and enjoy a smooth UI optimized 
    ```bash
    git clone https://github.com/your-username/crypto-dashboard.git
    cd crypto-dashboard
-
-   <img width="932" height="440" alt="free1" src="https://github.com/user-attachments/assets/8b994b25-bafe-445f-84b9-43cd1a5f0810" />
-
-
-   <img width="925" height="434" alt="free2" src="https://github.com/user-attachments/assets/e72eef94-41f4-4815-b75b-099d04a96d55" />
