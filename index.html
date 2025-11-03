@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Crypto Live Tracker — Fixed</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root{
+      --bg:#071022; --panel:#0b1220; --muted:#9fb4d6; --accent:#0ea5ff;
+      --pos:#16a34a; --neg:#ef4444; --card-border:rgba(255,255,255,0.03);
+    }
+    [data-theme="light"]{
+      --bg:#f7fafc; --panel:#ffffff; --muted:#475569; --accent:#2b6cb0;
+      --pos:#059669; --neg:#dc2626; --card-border:rgba(2,6,23,0.06);
+      color:#0b1220;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0;background:var(--bg);color:#e6eef6;padding:18px}
+    [data-theme="light"] body{color:#0b1220}
+    .wrap{max-width:1100px;margin:0 auto}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#0ea5ff,#7dd3fc);display:flex;align-items:center;justify-content:center;font-weight:700;color:#042a3a}
+    h1{margin:0;font-size:20px}
+    .subtitle{font-size:12px;color:var(--muted)}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    input[type="text"]{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;min-width:220px}
+    button{padding:8px 12px;border-radius:8px;border:0;background:var(--accent);color:#042a3a;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid var(--card-border);color:inherit}
+    .small{font-size:13px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-top:16px}
+    @media (max-width:900px){ .grid{grid-template-columns:1fr} }
+    .panel{background:var(--panel);padding:12px;border-radius:10px;border:1px solid var(--card-border)}
+    #cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+    .card{padding:12px;border-radius:8px;background:transparent;border:1px solid var(--card-border);cursor:pointer;transition:transform .12s}
+    .card:hover{transform:translateY(-6px)}
+    .price{font-weight:700}
+    .badge{padding:4px 8px;border-radius:999px;font-weight:600;font-size:12px;display:inline-block}
+    .pos{background:rgba(16,185,129,0.12);color:var(--pos);border:1px solid rgba(16,185,129,0.12)}
+    .neg{background:rgba(239,68,68,0.08);color:var(--neg);border:1px solid rgba(239,68,68,0.12)}
+    .controls-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .tf{padding:6px 10px;border-radius:8px;border:1px solid var(--card-border);background:transparent;cursor:pointer}
+    .tf.active{background:var(--accent);color:#042a3a}
+    canvas{width:100%!important;height:420px!important;background:transparent;border-radius:6px}
+    .spinner{width:18px;height:18px;border-radius:50%;border:3px solid rgba(255,255,255,0.08);border-top-color:var(--accent);animation:spin 1s linear infinite;display:inline-block;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    #status{margin-top:8px;color:var(--muted);min-height:18px}
+    #error{margin-top:8px;color:#ffadad;display:none;background:rgba(255,80,80,0.06);padding:8px;border-radius:8px}
+    footer{margin-top:16px;color:var(--muted);text-align:center;font-size:13px}
+    .allowed{margin-top:10px;font-size:13px;color:var(--muted)}
+  </style>
+</head>
+<body data-theme="dark">
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo">CR</div>
+        <div>
+          <h1>Crypto Live Tracker — Fixed</h1>
+          <div class="subtitle">Preloaded + cached charts · Supported search only</div>
+        </div>
+      </div>
+      <div class="small">Demo — Data via CoinGecko</div>
+    </header>
+
+    <div class="controls">
+      <input id="search" type="text" placeholder="Search (BTC / ETH / DOGE / SOL / XRP / ADA / SHIB / BNB)">
+      <button id="searchBtn">Search</button>
+      <button id="clearBtn" class="ghost">Clear</button>
+
+      <div class="controls-row" style="margin-left:8px;">
+        <button id="tf1" class="tf">1D</button>
+        <button id="tf7" class="tf active">7D</button>
+        <button id="tf30" class="tf">30D</button>
+        <button id="tf365" class="tf">1Y</button>
+      </div>
+
+      <button id="export" class="ghost">Export PNG</button>
+
+      <label class="small" style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <input id="theme" type="checkbox"/> Light
+      </label>
+
+      <label class="small" style="display:flex;gap:8px;align-items:center">
+        <input id="auto" type="checkbox" checked/> Auto-refresh (15s)
+      </label>
+
+      <button id="refresh" class="ghost">Refresh</button>
+    </div>
+
+    <div id="status" class="small">Initializing…</div>
+    <div id="error"></div>
+
+    <div class="allowed small">Supported: <strong id="allowedList"></strong></div>
+
+    <div class="grid">
+      <div class="panel">
+        <h3 class="small" style="margin:0 0 8px 0">Top Market (fast access)</h3>
+        <div id="cards"></div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <div>
+            <h3 id="chartTitle" style="margin:0">Select a supported coin</h3>
+            <div class="small" id="subtitle">Click a card or search</div>
+          </div>
+          <div id="loadingArea" style="min-width:64px;text-align:right"></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <canvas id="chartCanvas"></canvas>
+        </div>
+
+        <div id="extra" class="small" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <footer>Tip: if network errors appear, serve via local server (Python: <code>python -m http.server 8000</code>)</footer>
+  </div>
+
+  <script>
+  (function(){
+    // ---------- config ----------
+    var SUPPORTED = [
+      {id:'bitcoin', name:'Bitcoin', symbol:'BTC'},
+      {id:'ethereum', name:'Ethereum', symbol:'ETH'},
+      {id:'dogecoin', name:'Dogecoin', symbol:'DOGE'},
+      {id:'solana', name:'Solana', symbol:'SOL'},
+      {id:'ripple', name:'XRP', symbol:'XRP'},
+      {id:'cardano', name:'Cardano', symbol:'ADA'},
+      {id:'shiba-inu', name:'Shiba Inu', symbol:'SHIB'},
+      {id:'binancecoin', name:'Binance Coin', symbol:'BNB'}
+    ];
+
+    var TOP_IDS = SUPPORTED.map(function(c){ return c.id; }).join(',');
+    var TOP_API = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=' + TOP_IDS + '&order=market_cap_desc&sparkline=false';
+    var COIN_BASE = 'https://api.coingecko.com/api/v3/coins/';
+    var CHART_TTL_MS = 1000 * 60 * 60 * 24; // 24h localStorage
+    var INMEM_TTL = 1000 * 60 * 5; // 5min in-memory
+    var AUTO_MS = 15000;
+    var CARD_COUNT = 8;
+
+    // ---------- DOM ----------
+    var searchEl = document.getElementById('search');
+    var searchBtn = document.getElementById('searchBtn');
+    var clearBtn = document.getElementById('clearBtn');
+    var cardsEl = document.getElementById('cards');
+    var statusEl = document.getElementById('status');
+    var errorEl = document.getElementById('error');
+    var allowedEl = document.getElementById('allowedList');
+    var tf1 = document.getElementById('tf1');
+    var tf7 = document.getElementById('tf7');
+    var tf30 = document.getElementById('tf30');
+    var tf365 = document.getElementById('tf365');
+    var exportBtn = document.getElementById('export');
+    var themeToggle = document.getElementById('theme');
+    var autoToggle = document.getElementById('auto');
+    var refreshBtn = document.getElementById('refresh');
+    var loadingArea = document.getElementById('loadingArea');
+    var chartEl = document.getElementById('chartCanvas');
+    var chartTitle = document.getElementById('chartTitle');
+    var subtitle = document.getElementById('subtitle');
+    var extra = document.getElementById('extra');
+
+    // ---------- state ----------
+    var chart = null;
+    var inMem = {}; // key -> {ts, points}
+    var activeId = null;
+    var activeName = '';
+    var activeDays = 7;
+    var autoTimer = null;
+
+    // ---------- helpers ----------
+    function safeFetch(url){
+      return fetch(url).then(function(res){
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText + ' for ' + url);
+        return res.json();
+      });
+    }
+    function setStatus(msg, isError){
+      statusEl.textContent = msg || '';
+      if (isError){
+        errorEl.style.display = 'block';
+        errorEl.textContent = msg || '';
+      } else {
+        errorEl.style.display = 'none';
+        errorEl.textContent = '';
+      }
+    }
+    function showLoading(on){
+      loadingArea.innerHTML = on ? '<span class="spinner" title="loading"></span>' : '';
+    }
+    function fmt(n){
+      if (n == null) return 'N/A';
+      if (n >= 1e9) return (n/1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+      return String(n);
+    }
+    function keyFor(id, days){ return id + '|' + days; }
+    function localKey(id, days){ return 'crypto_cache:' + keyFor(id, days); }
+
+    function saveLocal(key, data){
+      try { localStorage.setItem(key, JSON.stringify({ts:Date.now(), data:data})); } catch(e){ console.warn('localStorage save failed', e); }
+    }
+    function loadLocal(key, maxAge){
+      try {
+        var raw = localStorage.getItem(key);
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        if (!parsed || !parsed.ts) return null;
+        if (Date.now() - parsed.ts > maxAge) return null;
+        return parsed.data;
+      } catch(e){ console.warn('localStorage load failed', e); return null; }
+    }
+
+    // ---------- render top cards (DOM-safe) ----------
+    function renderCards(markets){
+      cardsEl.innerHTML = '';
+      if (!Array.isArray(markets)) return;
+      markets.forEach(function(m){
+        var c = document.createElement('div');
+        c.className = 'card';
+
+        var left = document.createElement('div');
+        left.style.display = 'flex';
+        left.style.gap = '10px';
+        left.style.alignItems = 'center';
+
+        var img = document.createElement('img');
+        img.src = m.image || '';
+        img.alt = m.name || '';
+        img.style.width = '36px';
+        img.style.height = '36px';
+        img.style.borderRadius = '6px';
+        img.onerror = function(){ img.style.display = 'none'; };
+
+        var txt = document.createElement('div');
+        var nm = document.createElement('div');
+        nm.style.fontWeight = '700';
+        nm.textContent = m.name || '';
+        var sym = document.createElement('div');
+        sym.className = 'small';
+        sym.textContent = (m.symbol || '').toUpperCase();
+        txt.appendChild(nm); txt.appendChild(sym);
+
+        left.appendChild(img); left.appendChild(txt);
+
+        var right = document.createElement('div');
+        right.style.textAlign = 'right';
+        var price = document.createElement('div');
+        price.className = 'price';
+        price.textContent = (m.current_price != null) ? '$' + Number(m.current_price).toLocaleString() : 'N/A';
+        var change = document.createElement('div');
+        change.className = (m.price_change_percentage_24h != null && m.price_change_percentage_24h >= 0) ? 'pos badge' : (m.price_change_percentage_24h != null ? 'neg badge' : 'small');
+        change.textContent = (m.price_change_percentage_24h != null) ? m.price_change_percentage_24h.toFixed(2) + '%' : 'N/A';
+        right.appendChild(price); right.appendChild(change);
+
+        var topRow = document.createElement('div');
+        topRow.style.display = 'flex';
+        topRow.style.justifyContent = 'space-between';
+        topRow.style.alignItems = 'center';
+        topRow.appendChild(left); topRow.appendChild(right);
+
+        var bottom = document.createElement('div');
+        bottom.className = 'small';
+        bottom.style.marginTop = '8px';
+        bottom.textContent = 'Mkt: ' + (m.market_cap ? ('$' + fmt(m.market_cap)) : 'N/A') + ' • Vol: ' + (m.total_volume ? fmt(m.total_volume) : 'N/A');
+
+        c.appendChild(topRow); c.appendChild(bottom);
+
+        c.addEventListener('click', function(){ loadCoin(m.id, m.name); });
+
+        cardsEl.appendChild(c);
+      });
+    }
+
+    // ---------- chart functions ----------
+    function destroyChart(){
+      try{ if (chart){ chart.destroy(); chart = null; } }catch(e){ chart = null; }
+    }
+
+    function renderChartPoints(points, name){
+      if (!chartEl) return;
+      if (typeof Chart === 'undefined'){ setStatus('Chart.js missing', true); return; }
+      var ctx = chartEl.getContext('2d');
+      // points: [[timestamp, price], ...]
+      var labels = points.map(function(p){
+        var d = new Date(p[0]);
+        if (activeDays === 1) return d.toLocaleTimeString(); // show time for 1D
+        return d.toLocaleDateString();
+      });
+      var values = points.map(function(p){ return p[1]; });
+
+      destroyChart();
+      chart = new Chart(ctx, {
+        type:'line',
+        data:{
+          labels: labels,
+          datasets:[{
+            label: name + ' (' + activeDays + 'd)',
+            data: values,
+            borderColor:'rgba(14,165,255,0.95)',
+            backgroundColor:'rgba(14,165,255,0.08)',
+            tension:0.25,
+            pointRadius:2,
+            fill:true
+          }]
+        },
+        options:{
+          responsive:true,
+          interaction:{mode:'index',intersect:false},
+          plugins:{
+            legend:{display:false},
+            tooltip:{
+              callbacks:{
+                label:function(ctx){
+                  return '$' + Number(ctx.parsed.y).toLocaleString();
+                }
+              }
+            }
+          },
+          scales:{
+            y:{
+              ticks:{
+                callback:function(v){ return '$' + Number(v).toLocaleString(); }
+              }
+            }
+          }
+        }
+      });
+      chartTitle.textContent = name + ' — ' + activeDays + ' Day Chart';
+    }
+
+    // ---------- caching and fetch ----------
+    function fetchPoints(id, days){
+      var key = keyFor(id, days);
+      // in-memory
+      var mem = inMem[key];
+      if (mem && (Date.now() - mem.ts < INMEM_TTL)) return Promise.resolve(mem.points);
+
+      // localStorage
+      var local = loadLocal(localKey(id, days), CHART_TTL_MS);
+      if (local){
+        inMem[key] = {ts: Date.now(), points: local};
+        return Promise.resolve(local);
+      }
+
+      // network
+      var url = COIN_BASE + encodeURIComponent(id) + '/market_chart?vs_currency=usd&days=' + encodeURIComponent(days);
+      return safeFetch(url).then(function(payload){
+        var pts = (payload && payload.prices) ? payload.prices : [];
+        inMem[key] = {ts: Date.now(), points: pts};
+        saveLocal(localKey(id, days), pts);
+        return pts;
+      });
+    }
+
+    // ---------- prefetch (staggered) ----------
+    function prefetch(daysArray){
+      var delay = 0;
+      SUPPORTED.forEach(function(c){
+        daysArray.forEach(function(d){
+          setTimeout(function(){ fetchPoints(c.id, d).catch(function(e){ console.warn('prefetch fail', c.id, d, e && e.message); }); }, delay);
+          delay += 350;
+        });
+      });
+    }
+
+    // ---------- load top markets ----------
+    function loadTopMarkets(){
+      setStatus('Loading market data for supported coins...');
+      showLoading(true);
+      safeFetch(TOP_API).then(function(arr){
+        renderCards(arr || []);
+        setStatus('Markets loaded');
+        prefetch([1,7,30]);
+      }).catch(function(err){
+        setStatus('Failed to load markets', true);
+        console.error(err);
+      }).finally(function(){ showLoading(false); });
+    }
+
+    // ---------- load a coin (chart + details) ----------
+    function loadCoin(id, name){
+      if (!id) return;
+      activeId = id;
+      activeName = name || id;
+      setStatus('Loading ' + activeName + ' chart...');
+      showLoading(true);
+
+      fetchPoints(id, activeDays).then(function(points){
+        if (!points || points.length === 0){
+          setStatus('No chart data available', true);
+          destroyChart();
+          showLoading(false);
+          return;
+        }
+        renderChartPoints(points, activeName);
+        // fetch details separately (non-blocking for chart)
+        safeFetch(COIN_BASE + encodeURIComponent(id)).then(function(detail){
+          try{
+            var latest = points[points.length - 1] || [Date.now(), 'N/A'];
+            var rank = (detail && detail.market_cap_rank) ? detail.market_cap_rank : 'N/A';
+            var high24 = (detail && detail.market_data && detail.market_data.high_24h && detail.market_data.high_24h.usd) ? ('$' + Number(detail.market_data.high_24h.usd).toLocaleString()) : 'N/A';
+            var low24  = (detail && detail.market_data && detail.market_data.low_24h && detail.market_data.low_24h.usd) ? ('$' + Number(detail.market_data.low_24h.usd).toLocaleString()) : 'N/A';
+            var vol24  = (detail && detail.market_data && detail.market_data.total_volume && detail.market_data.total_volume.usd) ? ('$' + fmt(detail.market_data.total_volume.usd)) : 'N/A';
+            var supply = (detail && detail.market_data && detail.market_data.circulating_supply) ? fmt(detail.market_data.circulating_supply) : 'N/A';
+            var change24 = (detail && detail.market_data && detail.market_data.price_change_percentage_24h != null) ? detail.market_data.price_change_percentage_24h : null;
+            extra.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
+              '<div>Rank: <strong>'+rank+'</strong></div>'+
+              '<div>24h High: <strong>'+high24+'</strong></div>'+
+              '<div>24h Low: <strong>'+low24+'</strong></div>'+
+              '<div>24h Vol: <strong>'+vol24+'</strong></div>'+
+              '<div>Supply: <strong>'+supply+'</strong></div>'+
+              '<div>24h Change: <strong>'+(change24!=null? (change24>=0? '<span class="pos badge">'+change24.toFixed(2)+'%</span>' : '<span class="neg badge">'+change24.toFixed(2)+'%</span>') : 'N/A')+'</strong></div>'+
+              '</div>'+
+              '<div style="margin-top:8px">Latest: <strong>$'+Number(latest[1]).toLocaleString()+'</strong> (as of '+new Date(latest[0]).toLocaleString()+')</div>';
+          }catch(e){ console.warn('detail render error', e); }
+        }).catch(function(err){
+          console.warn('detail fetch failed', err);
+        }).finally(function(){ showLoading(false); setStatus(''); });
+      }).catch(function(err){
+        // failed to fetch points - try local fallback
+        console.warn('fetchPoints error', err);
+        var local = loadLocal(localKey(id, activeDays), CHART_TTL_MS);
+        if (local){
+          renderChartPoints(local, activeName + ' (cached)');
+          setStatus('Loaded cached chart (offline/rate-limited)');
+        } else {
+          setStatus('Failed to load chart', true);
+        }
+        showLoading(false);
+      });
+    }
+
+    // ---------- search (supported-only) ----------
+    function doSearch(q){
+      if (!q) return;
+      q = q.trim().toLowerCase();
+      var match = SUPPORTED.find(function(c){
+        return c.id === q || c.symbol.toLowerCase() === q || c.name.toLowerCase() === q;
+      });
+      if (!match){
+        setStatus('Only supported coins are searchable. See the list above.', true);
+        return;
+      }
+      setStatus('Searching ' + match.symbol + ' ...');
+      showLoading(true);
+      // fetch market data for this coin to show single card
+      safeFetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=' + encodeURIComponent(match.id) + '&sparkline=false').then(function(arr){
+        if (arr && arr.length) renderCards(arr);
+        loadCoin(match.id, match.name);
+      }).catch(function(err){
+        setStatus('Search failed', true);
+        console.error(err);
+        showLoading(false);
+      });
+    }
+
+    // ---------- UI wiring ----------
+    searchBtn.addEventListener('click', function(){ var q = searchEl.value.trim(); if (!q) return alert('Type a supported coin (BTC/ETH/DOGE/...)'); doSearch(q); });
+    clearBtn.addEventListener('click', function(){ searchEl.value=''; extra.innerHTML=''; loadTopMarkets(); destroyChart(); setStatus(''); });
+    searchEl.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); var q = searchEl.value.trim(); if (!q) return alert('Type a supported coin'); doSearch(q); } });
+
+    tf1.addEventListener('click', function(){ setActiveDays(1); });
+    tf7.addEventListener('click', function(){ setActiveDays(7); });
+    tf30.addEventListener('click', function(){ setActiveDays(30); });
+    tf365.addEventListener('click', function(){ setActiveDays(365); });
+
+    exportBtn.addEventListener('click', function(){ if (!chart) return alert('No chart to export'); try{ var url = chart.toBase64Image(); var a = document.createElement('a'); a.href = url; a.download = (activeName||'chart')+'-'+activeDays+'d.png'; document.body.appendChild(a); a.click(); a.remove(); } catch(e){ alert('Export failed: ' + (e && e.message)); } });
+
+    themeToggle.addEventListener('change', function(){ document.documentElement.setAttribute('data-theme', themeToggle.checked ? 'light' : 'dark'); });
+
+    refreshBtn.addEventListener('click', function(){ loadTopMarkets(); if (activeId) loadCoin(activeId, activeName); });
+
+    autoToggle.addEventListener('change', function(){ if (autoToggle.checked) startAuto(); else stopAuto(); });
+
+    function setActiveDays(d){
+      activeDays = d;
+      [tf1,tf7,tf30,tf365].forEach(function(btn){ btn.classList.remove('active'); });
+      if (d===1) tf1.classList.add('active');
+      if (d===7) tf7.classList.add('active');
+      if (d===30) tf30.classList.add('active');
+      if (d===365) tf365.classList.add('active');
+      if (activeId) loadCoin(activeId, activeName);
+    }
+
+    function startAuto(){ if (autoTimer) clearInterval(autoTimer); autoTimer = setInterval(loadTopMarkets, AUTO_MS); }
+    function stopAuto(){ if (autoTimer) clearInterval(autoTimer); autoTimer = null; }
+
+    // ---------- initial load ----------
+    function init(){
+      allowedEl.textContent = SUPPORTED.map(function(c){ return c.symbol; }).join(', ');
+      loadTopMarkets();
+      if (autoToggle.checked) startAuto();
+      setStatus('Ready — search or click a card');
+    }
+
+    init();
+
+    // expose debug helpers (optional)
+    window.__cryptoFast = { loadCoin: loadCoin, doSearch: doSearch, fetchPoints: fetchPoints };
+
+  })();
+  </script>
+</body>
+</html>
